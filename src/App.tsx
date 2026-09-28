@@ -123,7 +123,10 @@ function createInvoicePdf(order: Order) {
 }
 
 function openInvoicePreview(order: Order) {
-  const preview = window.open('', '_blank', 'width=760,height=900')
+  const pdfUrl = createInvoicePdf(order).output('bloburl')
+  return window.open(pdfUrl, '_blank', 'noopener,noreferrer')
+  /* Keep the printable HTML fallback below for browsers that block PDF blob previews. */
+  const preview = window.open('', '_blank', 'width=760,height=900')!
   if (!preview) return
   const rows = order.items.map((item) => `<tr><td>${item.name}<small>${item.brand} · ${item.unit}</small></td><td>${item.quantity}</td><td>${money(item.price * item.quantity)}</td></tr>`).join('')
   preview.document.write(`<!doctype html><html><head><title>Invoice #${order.code}</title><style>body{font-family:Arial,sans-serif;max-width:680px;margin:40px auto;color:#242923;padding:0 24px}header{border-bottom:2px solid #174b3c;padding-bottom:18px}h1{color:#174b3c;font-size:25px;margin:0 0 7px}h2{font-size:17px;color:#174b3c;margin-top:28px}p{color:#69756b;font-size:12px;line-height:1.5;margin:4px 0}table{width:100%;border-collapse:collapse;margin-top:22px}td,th{text-align:left;border-bottom:1px solid #dedfd5;padding:11px 5px;font-size:13px}td:nth-child(2),th:nth-child(2){text-align:center;width:60px}td:last-child,th:last-child{text-align:right}small{display:block;color:#8b958b;font-size:10px;margin-top:3px}.total{text-align:right;border-top:2px solid #174b3c;margin-top:22px;padding-top:14px;color:#174b3c;font-size:19px}</style></head><body><header><h1>marketcounter</h1><p>Neighbourhood essentials · Delivery invoice</p><p>Invoice #${order.code} · ${formatOrderDate(order.createdAt)}</p><p>${order.customer} · ${order.phone}</p><p>${order.address}</p></header><h2>Items</h2><table><thead><tr><th>Item</th><th>Qty</th><th>Amount</th></tr></thead><tbody>${rows}</tbody></table><p class="total">Total: ${money(order.total)}</p><p>Payment: ${order.payment}</p></body></html>`)
@@ -135,8 +138,14 @@ function openInvoicePreview(order: Order) {
 function shareInvoiceOnWhatsApp(order: Order) {
   const phone = order.phone.replace(/\D/g, '')
   const normalizedPhone = phone.length === 10 ? `91${phone}` : phone
-  const message = `Hello ${order.customer}, your marketcounter order #${order.code} invoice is ready. Total: ${money(order.total)}. Thank you for shopping with us.`
+  createInvoicePdf(order).save(`marketcounter-invoice-${order.code}.pdf`)
+  const message = `Hello ${order.customer}, your marketcounter order #${order.code} invoice PDF has been downloaded and is ready to attach. Total: ${money(order.total)}. Thank you for shopping with us.`
   window.open(`https://wa.me/${normalizedPhone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer')
+}
+
+function openInvoicePdf(order: Order) {
+  const pdfUrl = createInvoicePdf(order).output('bloburl')
+  window.open(pdfUrl, '_blank', 'noopener,noreferrer')
 }
 
 function printThermalReceipt(order: Order) {
@@ -265,6 +274,7 @@ function App() {
 
     {view === 'admin' && <main className="admin-page">{!adminAuthed ? <AdminLogin credentials={adminCredentials} setCredentials={setAdminCredentials} error={adminError} onSubmit={signInAdmin} /> : <AdminWorkspace catalog={catalog} onAddProduct={(product) => setCatalog((current) => [...current, product])} orders={filteredOrders} allOrders={orders} search={adminSearch} setSearch={setAdminSearch} filter={adminFilter} setFilter={setAdminFilter} selectedOrder={selectedOrder} setSelectedOrder={setSelectedOrder} onStatus={updateOrderStatus} onLogout={() => setAdminAuthed(false)} />}</main>}
     {view === 'admin' && adminAuthed && <AdminProductQuickAdd catalog={catalog} onAddProduct={(product) => setCatalog((current) => [...current, product])} />}
+    {view === 'admin' && adminAuthed && <AdminBillingQuickAccess orders={orders} onStatus={updateOrderStatus} />}
     {notice && <div className="notice"><Check size={15} /> {notice}<button onClick={() => setNotice('')}><X size={14} /></button></div>}
   </div>
 }
@@ -285,7 +295,18 @@ function OrderStatusCard({ order }: { order: Order }) {
 
 function AdminProductQuickAdd({ catalog, onAddProduct }: { catalog: Product[]; onAddProduct: (product: Product) => void }) {
   const [open, setOpen] = useState(false)
+  const [inventoryActive, setInventoryActive] = useState(false)
   const [form, setForm] = useState({ name: '', brand: '', category: 'Snacks', unit: '', price: '', mrp: '', stock: '' })
+
+  useEffect(() => {
+    const syncVisibility = () => setInventoryActive(document.querySelector('.admin-nav.active')?.textContent?.includes('Inventory') ?? false)
+    syncVisibility()
+    const sidebar = document.querySelector('.admin-sidebar')
+    if (!sidebar) return
+    const observer = new MutationObserver(syncVisibility)
+    observer.observe(sidebar, { subtree: true, attributes: true, attributeFilter: ['class'] })
+    return () => observer.disconnect()
+  }, [])
 
   function submit(event: FormEvent) {
     event.preventDefault()
@@ -297,7 +318,14 @@ function AdminProductQuickAdd({ catalog, onAddProduct }: { catalog: Product[]; o
     setOpen(false)
   }
 
+  if (!inventoryActive) return null
   return <>{open && <div className="product-modal-backdrop" onClick={() => setOpen(false)}><form className="product-modal" onSubmit={submit} onClick={(event) => event.stopPropagation()}><div className="product-modal-heading"><div><p className="kicker">Inventory intake</p><h2>Add new product</h2></div><button type="button" onClick={() => setOpen(false)}><X size={17} /></button></div><div className="product-form-grid"><label>Product name<input required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="e.g. Green Tea Bags" /></label><label>Brand<input required value={form.brand} onChange={(event) => setForm({ ...form, brand: event.target.value })} placeholder="e.g. Tata Tea" /></label><label>Category<select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>{categories.slice(1).map((category) => <option key={category}>{category}</option>)}</select></label><label>Pack size<input required value={form.unit} onChange={(event) => setForm({ ...form, unit: event.target.value })} placeholder="e.g. 250 g" /></label><label>Selling price<input required type="number" min="1" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} placeholder="₹" /></label><label>MRP <span>(optional)</span><input type="number" min="1" value={form.mrp} onChange={(event) => setForm({ ...form, mrp: event.target.value })} placeholder="₹" /></label><label>Opening stock<input required type="number" min="0" value={form.stock} onChange={(event) => setForm({ ...form, stock: event.target.value })} placeholder="Units" /></label></div><button className="primary-button full" type="submit">Add to catalog <Plus size={15} /></button></form></div>}<button className="add-product-fab" onClick={() => setOpen(true)}><Plus size={16} /> Add product</button></>
+}
+
+function AdminBillingQuickAccess({ orders, onStatus }: { orders: Order[]; onStatus: (order: Order, status: OrderStatus) => void }) {
+  const [open, setOpen] = useState(false)
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
+  return <>{open && <div className="billing-modal-backdrop" onClick={() => setOpen(false)}><section className="billing-modal" onClick={(event) => event.stopPropagation()}><div className="billing-modal-heading"><div><p className="kicker">Admin billing</p><h2>Generate customer bills</h2></div><button onClick={() => setOpen(false)}><X size={17} /></button></div><div className="billing-layout"><div className="billing-order-list">{orders.map((order) => <button className={selectedOrder?.code === order.code ? 'billing-order selected' : 'billing-order'} key={order.code} onClick={() => setSelectedOrder(order)}><strong>#{order.code}</strong><span><b>{order.customer}</b><small>{formatOrderDate(order.createdAt)}</small></span><b>{money(order.total)}</b></button>)}</div>{selectedOrder ? <OrderDetail order={selectedOrder} onClose={() => setSelectedOrder(null)} onStatus={onStatus} /> : <div className="billing-empty"><Receipt size={28} /><h3>Select an order to bill</h3><p>View the invoice, download the PDF, share it on WhatsApp, or print a completed thermal receipt.</p></div>}</div></section></div>}<button className="billing-sidebar-tab" onClick={() => setOpen(true)}><Receipt size={16} /> Billing</button></>
 }
 
 function AdminLogin({ credentials, setCredentials, error, onSubmit }: { credentials: { id: string; password: string }; setCredentials: (value: { id: string; password: string }) => void; error: string; onSubmit: (event: FormEvent) => void }) {
