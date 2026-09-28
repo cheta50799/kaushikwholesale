@@ -77,6 +77,8 @@ function loadRetainedOrders() {
 
 function createInvoicePdf(order: Order) {
   const pdf = new jsPDF({ unit: 'mm', format: 'a4' })
+  const subtotal = order.items.reduce((sum, item) => sum + item.price * item.quantity, 0)
+  const taxAndDelivery = Math.max(0, order.total - subtotal)
   let y = 24
   pdf.setTextColor(23, 75, 60)
   pdf.setFontSize(19)
@@ -90,14 +92,16 @@ function createInvoicePdf(order: Order) {
   y += 34
   pdf.setTextColor(35, 41, 35)
   pdf.setFontSize(15)
-  pdf.text(`Invoice #${order.code}`, 20, y)
+  pdf.text('TAX INVOICE / BILL', 20, y)
+  pdf.setFontSize(12)
+  pdf.text(`#${order.code}`, 20, y + 7)
   pdf.setFontSize(9)
   pdf.setTextColor(105, 116, 105)
   pdf.text(formatOrderDate(order.createdAt), 145, y)
-  pdf.text(`Customer: ${order.customer}`, 20, y + 8)
-  pdf.text(order.phone, 20, y + 13)
-  pdf.text(order.address, 20, y + 18)
-  y += 31
+  pdf.text(`Bill to: ${order.customer}`, 20, y + 16)
+  pdf.text(order.phone, 20, y + 21)
+  pdf.text(order.address, 20, y + 26)
+  y += 39
   pdf.setTextColor(23, 75, 60)
   pdf.text('Item', 20, y)
   pdf.text('Qty', 135, y)
@@ -113,9 +117,18 @@ function createInvoicePdf(order: Order) {
   y += 5
   pdf.line(120, y, 190, y)
   y += 8
-  pdf.text('Order total', 125, y)
-  pdf.text(money(order.total), 165, y)
+  pdf.text('Subtotal', 125, y)
+  pdf.text(money(subtotal), 165, y)
   y += 7
+  pdf.text('GST / delivery', 125, y)
+  pdf.text(money(taxAndDelivery), 165, y)
+  y += 8
+  pdf.setTextColor(23, 75, 60)
+  pdf.setFontSize(13)
+  pdf.text('Grand total', 125, y)
+  pdf.text(money(order.total), 165, y)
+  y += 8
+  pdf.setFontSize(9)
   pdf.text(`Payment: ${order.payment}`, 125, y)
   pdf.setTextColor(105, 116, 105)
   pdf.text('Thank you for shopping with marketcounter.', 20, 270)
@@ -205,6 +218,14 @@ function App() {
     localStorage.setItem(orderStorageKey, JSON.stringify(nextOrders))
   }
 
+  function createAdminOrder(details: Omit<Order, 'code' | 'createdAt' | 'status'>) {
+    let code = String(Math.floor(1000 + Math.random() * 9000))
+    while (orders.some((order) => order.code === code)) code = String(Math.floor(1000 + Math.random() * 9000))
+    const order = { ...details, code, createdAt: Date.now(), status: 'Delivered' as OrderStatus }
+    updateOrders([order, ...orders])
+    return order
+  }
+
   function addToCart(product: Product) {
     setCart((current) => {
       const existing = current.find((item) => item.id === product.id)
@@ -274,7 +295,7 @@ function App() {
 
     {view === 'admin' && <main className="admin-page">{!adminAuthed ? <AdminLogin credentials={adminCredentials} setCredentials={setAdminCredentials} error={adminError} onSubmit={signInAdmin} /> : <AdminWorkspace catalog={catalog} onAddProduct={(product) => setCatalog((current) => [...current, product])} orders={filteredOrders} allOrders={orders} search={adminSearch} setSearch={setAdminSearch} filter={adminFilter} setFilter={setAdminFilter} selectedOrder={selectedOrder} setSelectedOrder={setSelectedOrder} onStatus={updateOrderStatus} onLogout={() => setAdminAuthed(false)} />}</main>}
     {view === 'admin' && adminAuthed && <AdminProductQuickAdd catalog={catalog} onAddProduct={(product) => setCatalog((current) => [...current, product])} />}
-    {view === 'admin' && adminAuthed && <AdminBillingQuickAccess orders={orders} onStatus={updateOrderStatus} />}
+    {view === 'admin' && adminAuthed && <AdminBillingQuickAccess catalog={catalog} orders={orders} onStatus={updateOrderStatus} onCreateOrder={createAdminOrder} />}
     {notice && <div className="notice"><Check size={15} /> {notice}<button onClick={() => setNotice('')}><X size={14} /></button></div>}
   </div>
 }
@@ -322,10 +343,41 @@ function AdminProductQuickAdd({ catalog, onAddProduct }: { catalog: Product[]; o
   return <>{open && <div className="product-modal-backdrop" onClick={() => setOpen(false)}><form className="product-modal" onSubmit={submit} onClick={(event) => event.stopPropagation()}><div className="product-modal-heading"><div><p className="kicker">Inventory intake</p><h2>Add new product</h2></div><button type="button" onClick={() => setOpen(false)}><X size={17} /></button></div><div className="product-form-grid"><label>Product name<input required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="e.g. Green Tea Bags" /></label><label>Brand<input required value={form.brand} onChange={(event) => setForm({ ...form, brand: event.target.value })} placeholder="e.g. Tata Tea" /></label><label>Category<select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>{categories.slice(1).map((category) => <option key={category}>{category}</option>)}</select></label><label>Pack size<input required value={form.unit} onChange={(event) => setForm({ ...form, unit: event.target.value })} placeholder="e.g. 250 g" /></label><label>Selling price<input required type="number" min="1" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} placeholder="₹" /></label><label>MRP <span>(optional)</span><input type="number" min="1" value={form.mrp} onChange={(event) => setForm({ ...form, mrp: event.target.value })} placeholder="₹" /></label><label>Opening stock<input required type="number" min="0" value={form.stock} onChange={(event) => setForm({ ...form, stock: event.target.value })} placeholder="Units" /></label></div><button className="primary-button full" type="submit">Add to catalog <Plus size={15} /></button></form></div>}<button className="add-product-fab" onClick={() => setOpen(true)}><Plus size={16} /> Add product</button></>
 }
 
-function AdminBillingQuickAccess({ orders, onStatus }: { orders: Order[]; onStatus: (order: Order, status: OrderStatus) => void }) {
+function AdminBillingQuickAccess({ catalog, orders, onStatus, onCreateOrder }: { catalog: Product[]; orders: Order[]; onStatus: (order: Order, status: OrderStatus) => void; onCreateOrder: (details: Omit<Order, 'code' | 'createdAt' | 'status'>) => Order }) {
   const [open, setOpen] = useState(false)
+  const [mode, setMode] = useState<'create' | 'history'>('create')
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
-  return <>{open && <div className="billing-modal-backdrop" onClick={() => setOpen(false)}><section className="billing-modal" onClick={(event) => event.stopPropagation()}><div className="billing-modal-heading"><div><p className="kicker">Admin billing</p><h2>Generate customer bills</h2></div><button onClick={() => setOpen(false)}><X size={17} /></button></div><div className="billing-layout"><div className="billing-order-list">{orders.map((order) => <button className={selectedOrder?.code === order.code ? 'billing-order selected' : 'billing-order'} key={order.code} onClick={() => setSelectedOrder(order)}><strong>#{order.code}</strong><span><b>{order.customer}</b><small>{formatOrderDate(order.createdAt)}</small></span><b>{money(order.total)}</b></button>)}</div>{selectedOrder ? <OrderDetail order={selectedOrder} onClose={() => setSelectedOrder(null)} onStatus={onStatus} /> : <div className="billing-empty"><Receipt size={28} /><h3>Select an order to bill</h3><p>View the invoice, download the PDF, share it on WhatsApp, or print a completed thermal receipt.</p></div>}</div></section></div>}<button className="billing-sidebar-tab" onClick={() => setOpen(true)}><Receipt size={16} /> Billing</button></>
+  const [customer, setCustomer] = useState({ name: '', phone: '', address: '' })
+  const [payment, setPayment] = useState('Cash')
+  const [productId, setProductId] = useState(String(catalog[0]?.id ?? ''))
+  const [quantity, setQuantity] = useState('1')
+  const [billLines, setBillLines] = useState<CartLine[]>([])
+  const subtotal = billLines.reduce((sum, item) => sum + item.price * item.quantity, 0)
+  const gst = subtotal * 0.05
+  const total = subtotal + gst
+
+  function addLine() {
+    const product = catalog.find((item) => item.id === Number(productId))
+    const amount = Math.max(1, Number(quantity) || 1)
+    if (!product) return
+    setBillLines((current) => {
+      const existing = current.find((item) => item.id === product.id)
+      return existing ? current.map((item) => item.id === product.id ? { ...item, quantity: item.quantity + amount } : item) : [...current, { ...product, quantity: amount }]
+    })
+    setQuantity('1')
+  }
+
+  function createBill(event: FormEvent) {
+    event.preventDefault()
+    if (!customer.name.trim() || !customer.phone.trim() || !customer.address.trim() || !billLines.length) return
+    const order = onCreateOrder({ customer: customer.name.trim(), phone: customer.phone.trim(), address: customer.address.trim(), payment, items: billLines, total })
+    setSelectedOrder(order)
+    setMode('history')
+    setCustomer({ name: '', phone: '', address: '' })
+    setBillLines([])
+  }
+
+  return <>{open && <div className="billing-modal-backdrop" onClick={() => setOpen(false)}><section className="billing-modal" onClick={(event) => event.stopPropagation()}><div className="billing-modal-heading"><div><p className="kicker">Admin billing</p><h2>Create and manage bills</h2></div><button onClick={() => setOpen(false)}><X size={17} /></button></div><div className="billing-tabs"><button className={mode === 'create' ? 'active' : ''} onClick={() => setMode('create')}><Plus size={14} /> Create bill</button><button className={mode === 'history' ? 'active' : ''} onClick={() => setMode('history')}><Receipt size={14} /> Past bills</button></div>{mode === 'create' ? <form className="billing-create-form" onSubmit={createBill}><div className="billing-create-grid"><label>Customer name<input required value={customer.name} onChange={(event) => setCustomer({ ...customer, name: event.target.value })} placeholder="e.g. Ananya Das" /></label><label>WhatsApp / mobile<input required value={customer.phone} onChange={(event) => setCustomer({ ...customer, phone: event.target.value })} placeholder="98765 43210" inputMode="tel" /></label><label className="wide">Billing address<input required value={customer.address} onChange={(event) => setCustomer({ ...customer, address: event.target.value })} placeholder="Flat, building, street and locality" /></label></div><div className="billing-product-builder"><select value={productId} onChange={(event) => setProductId(event.target.value)}>{catalog.map((product) => <option key={product.id} value={product.id}>{product.name} · {money(product.price)}</option>)}</select><input type="number" min="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} /><button type="button" className="secondary-button" onClick={addLine}><Plus size={14} /> Add item</button></div><div className="billing-line-list">{billLines.map((item) => <div key={item.id}><span>{item.icon}</span><b>{item.name}</b><small>{item.quantity} × {money(item.price)}</small><strong>{money(item.price * item.quantity)}</strong></div>)}{!billLines.length && <p>Add products to start this bill.</p>}</div><div className="billing-summary"><span>Subtotal <b>{money(subtotal)}</b></span><span>GST 5% <b>{money(gst)}</b></span><strong>Total <b>{money(total)}</b></strong></div><div className="billing-create-footer"><select value={payment} onChange={(event) => setPayment(event.target.value)}><option>Cash</option><option>UPI</option><option>Card</option></select><button className="primary-button" type="submit">Create bill & invoice <FileText size={15} /></button></div></form> : <div className="billing-layout"><div className="billing-order-list">{orders.map((order) => <button className={selectedOrder?.code === order.code ? 'billing-order selected' : 'billing-order'} key={order.code} onClick={() => setSelectedOrder(order)}><strong>#{order.code}</strong><span><b>{order.customer}</b><small>{formatOrderDate(order.createdAt)}</small></span><b>{money(order.total)}</b></button>)}</div>{selectedOrder ? <OrderDetail order={selectedOrder} onClose={() => setSelectedOrder(null)} onStatus={onStatus} /> : <div className="billing-empty"><Receipt size={28} /><h3>Select an order to bill</h3><p>View the PDF, download it, share it on WhatsApp, or print a completed thermal receipt.</p></div>}</div>}</section></div>}<button className="billing-sidebar-tab" onClick={() => { setOpen(true); setMode('create') }}><Receipt size={16} /> Billing</button></>
 }
 
 function AdminLogin({ credentials, setCredentials, error, onSubmit }: { credentials: { id: string; password: string }; setCredentials: (value: { id: string; password: string }) => void; error: string; onSubmit: (event: FormEvent) => void }) {
