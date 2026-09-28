@@ -190,8 +190,7 @@ function App() {
     return categoryMatch && searchMatch
   }), [category, search])
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0)
-  const deliveryFee = subtotal >= 499 || subtotal === 0 ? 0 : 30
-  const total = subtotal + deliveryFee
+  const total = subtotal
   const trackedOrder = orders.find((order) => order.code === trackCode)
   const filteredOrders = orders.filter((order) => {
     const searchMatch = `${order.code} ${order.customer} ${order.phone}`.toLowerCase().includes(adminSearch.toLowerCase())
@@ -283,7 +282,7 @@ function App() {
     {view === 'shop' && <main className="customer-main">
       <section className="store-hero"><div className="hero-copy"><p className="kicker">Open daily · 7:00 AM to 11:00 PM</p><h1>The everyday shop,<br /><em>delivered.</em></h1><p>Snacks, drinks, breakfast and home essentials from your neighbourhood store. Delivered fresh to your door in under 30 minutes.</p><div className="hero-actions"><button className="primary-button" onClick={() => document.getElementById('catalog')?.scrollIntoView({ behavior: 'smooth' })}>Start shopping <ArrowRight size={16} /></button><button className="text-link" onClick={() => setView('track')}>Track an order <ChevronRight size={15} /></button></div></div><div className="hero-art"><div className="hero-sun" /><div className="hero-shelf shelf-back"><i /><i /><i /><i /><i /></div><div className="hero-shelf shelf-front"><i /><i /><i /><i /></div><span className="hero-product product-one">🥤</span><span className="hero-product product-two">🍫</span><span className="hero-product product-three">🥔</span><div className="hero-sticker">FRESH<br /><b>EVERY<br />DAY</b></div></div></section>
       <section className="service-strip"><div><Truck size={20} /><span><b>Fast local delivery</b><small>Under 30 min on orders over ₹199</small></span></div><div><ShieldCheck size={20} /><span><b>Secure payments</b><small>UPI, cards and cash at your door</small></span></div><div><PackageCheck size={20} /><span><b>Quality checked</b><small>Fresh stock from trusted brands</small></span></div></section>
-      <section className="catalog-section" id="catalog"><div className="section-intro"><div><p className="kicker">Curated for your everyday</p><h2>What are you picking up?</h2></div><div className="search-field"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search products or brands" /></div></div><div className="category-row">{categories.map((item) => <button className={category === item ? 'selected' : ''} key={item} onClick={() => setCategory(item)}>{item}</button>)}</div><div className="product-layout"><div className="product-grid">{filteredProducts.map((product) => <article className="product-card" key={product.id}><div className={`product-visual ${product.tone}`}><span>{product.icon}</span>{product.tag && <b>{product.tag}</b>}<button onClick={() => addToCart(product)} aria-label={`Add ${product.name}`}><Plus size={17} /></button></div><div className="product-details"><div><small>{product.brand}</small><h3>{product.name}</h3><span>{product.unit}</span></div><div className="price"><strong>{money(product.price)}</strong>{product.mrp !== product.price && <del>{money(product.mrp)}</del>}</div></div></article>)}</div><Basket cart={cart} subtotal={subtotal} deliveryFee={deliveryFee} total={total} changeQuantity={changeQuantity} onClear={() => setCart([])} onCheckout={() => document.getElementById('checkout-form')?.scrollIntoView({ behavior: 'smooth' })} /></div></section>
+      <section className="catalog-section" id="catalog"><div className="section-intro"><div><p className="kicker">Curated for your everyday</p><h2>What are you picking up?</h2></div><div className="search-field"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search products or brands" /></div></div><div className="category-row">{categories.map((item) => <button className={category === item ? 'selected' : ''} key={item} onClick={() => setCategory(item)}>{item}</button>)}</div><div className="product-layout"><div className="product-grid">{filteredProducts.map((product) => <article className="product-card" key={product.id}><div className={`product-visual ${product.tone}`}><span>{product.icon}</span>{product.tag && <b>{product.tag}</b>}<button onClick={() => addToCart(product)} aria-label={`Add ${product.name}`}><Plus size={17} /></button></div><div className="product-details"><div><small>{product.brand}</small><h3>{product.name}</h3><span>{product.unit}</span></div><div className="price"><strong>{money(product.price)}</strong>{product.mrp !== product.price && <del>{money(product.mrp)}</del>}</div></div></article>)}</div><Basket cart={cart} subtotal={subtotal} total={total} changeQuantity={changeQuantity} onClear={() => setCart([])} onCheckout={() => document.getElementById('checkout-form')?.scrollIntoView({ behavior: 'smooth' })} /></div></section>
       <CheckoutForm customer={customer} setCustomer={setCustomer} payment={payment} setPayment={setPayment} cart={cart} total={total} onSubmit={placeOrder} />
     </main>}
 
@@ -292,12 +291,13 @@ function App() {
     {view === 'admin' && <main className="admin-page">{!adminAuthed ? <AdminLogin credentials={adminCredentials} setCredentials={setAdminCredentials} error={adminError} onSubmit={signInAdmin} /> : <AdminWorkspace catalog={catalog} onAddProduct={(product) => setCatalog((current) => [...current, product])} orders={filteredOrders} allOrders={orders} search={adminSearch} setSearch={setAdminSearch} filter={adminFilter} setFilter={setAdminFilter} selectedOrder={selectedOrder} setSelectedOrder={setSelectedOrder} onStatus={updateOrderStatus} onLogout={() => setAdminAuthed(false)} />}</main>}
     {view === 'admin' && adminAuthed && <AdminProductQuickAdd catalog={catalog} onAddProduct={(product) => setCatalog((current) => [...current, product])} />}
     {view === 'admin' && adminAuthed && <AdminBillingQuickAccess catalog={catalog} orders={orders} onStatus={updateOrderStatus} onCreateOrder={createAdminOrder} />}
+    {view === 'admin' && adminAuthed && <BillingProductSearch catalog={catalog} />}
     {notice && <div className="notice"><Check size={15} /> {notice}<button onClick={() => setNotice('')}><X size={14} /></button></div>}
   </div>
 }
 
-function Basket({ cart, subtotal, deliveryFee, total, changeQuantity, onClear, onCheckout }: { cart: CartLine[]; subtotal: number; deliveryFee: number; total: number; changeQuantity: (id: number, amount: number) => void; onClear: () => void; onCheckout: () => void }) {
-  return <aside className="basket" id="basket"><div className="basket-heading"><div><p className="kicker">Your basket</p><h2>{cart.length ? `${cart.reduce((sum, item) => sum + item.quantity, 0)} items` : 'Start an order'}</h2></div>{cart.length > 0 && <button className="clear-link" onClick={onClear}>Clear all</button>}</div>{cart.length === 0 ? <div className="empty-basket"><ShoppingCart size={25} /><p>Your basket is waiting</p><span>Add a few essentials and they will show up here.</span></div> : <><div className="basket-lines">{cart.map((item) => <div className="basket-line" key={item.id}><span className={`line-icon ${item.tone}`}>{item.icon}</span><div><b>{item.name}</b><small>{money(item.price)} · {item.unit}</small></div><div className="stepper"><button onClick={() => changeQuantity(item.id, -1)}>-</button><b>{item.quantity}</b><button onClick={() => changeQuantity(item.id, 1)}>+</button></div></div>)}</div><div className="basket-total"><div><span>Subtotal</span><b>{money(subtotal)}</b></div><div><span>Delivery</span><b className={deliveryFee === 0 ? 'free' : ''}>{deliveryFee === 0 ? 'FREE' : money(deliveryFee)}</b></div><div className="grand-total"><span>Total</span><strong>{money(total)}</strong></div></div><button className="primary-button full" onClick={onCheckout}>Continue to checkout <ArrowRight size={16} /></button></>}</aside>
+function Basket({ cart, subtotal, total, changeQuantity, onClear, onCheckout }: { cart: CartLine[]; subtotal: number; total: number; changeQuantity: (id: number, amount: number) => void; onClear: () => void; onCheckout: () => void }) {
+  return <aside className="basket" id="basket"><div className="basket-heading"><div><p className="kicker">Your basket</p><h2>{cart.length ? `${cart.reduce((sum, item) => sum + item.quantity, 0)} items` : 'Start an order'}</h2></div>{cart.length > 0 && <button className="clear-link" onClick={onClear}>Clear all</button>}</div>{cart.length === 0 ? <div className="empty-basket"><ShoppingCart size={25} /><p>Your basket is waiting</p><span>Add a few essentials and they will show up here.</span></div> : <><div className="basket-lines">{cart.map((item) => <div className="basket-line" key={item.id}><span className={`line-icon ${item.tone}`}>{item.icon}</span><div><b>{item.name}</b><small>{money(item.price)} · {item.unit}</small></div><div className="stepper"><button onClick={() => changeQuantity(item.id, -1)}>-</button><b>{item.quantity}</b><button onClick={() => changeQuantity(item.id, 1)}>+</button></div></div>)}</div><div className="basket-total"><div className="grand-total"><span>Total</span><strong>{money(total)}</strong></div></div><button className="primary-button full" onClick={onCheckout}>Continue to checkout <ArrowRight size={16} /></button></>}</aside>
 }
 
 function CheckoutForm({ customer, setCustomer, payment, setPayment, cart, total, onSubmit }: { customer: { name: string; phone: string; address: string }; setCustomer: (value: { name: string; phone: string; address: string }) => void; payment: string; setPayment: (value: string) => void; cart: CartLine[]; total: number; onSubmit: (event: FormEvent) => void }) {
@@ -337,6 +337,37 @@ function AdminProductQuickAdd({ catalog, onAddProduct }: { catalog: Product[]; o
 
   if (!inventoryActive) return null
   return <>{open && <div className="product-modal-backdrop" onClick={() => setOpen(false)}><form className="product-modal" onSubmit={submit} onClick={(event) => event.stopPropagation()}><div className="product-modal-heading"><div><p className="kicker">Inventory intake</p><h2>Add new product</h2></div><button type="button" onClick={() => setOpen(false)}><X size={17} /></button></div><div className="product-form-grid"><label>Product name<input required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="e.g. Green Tea Bags" /></label><label>Brand<input required value={form.brand} onChange={(event) => setForm({ ...form, brand: event.target.value })} placeholder="e.g. Tata Tea" /></label><label>Category<select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>{categories.slice(1).map((category) => <option key={category}>{category}</option>)}</select></label><label>Pack size<input required value={form.unit} onChange={(event) => setForm({ ...form, unit: event.target.value })} placeholder="e.g. 250 g" /></label><label>Selling price<input required type="number" min="1" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} placeholder="₹" /></label><label>MRP <span>(optional)</span><input type="number" min="1" value={form.mrp} onChange={(event) => setForm({ ...form, mrp: event.target.value })} placeholder="₹" /></label><label>Opening stock<input required type="number" min="0" value={form.stock} onChange={(event) => setForm({ ...form, stock: event.target.value })} placeholder="Units" /></label></div><button className="primary-button full" type="submit">Add to catalog <Plus size={15} /></button></form></div>}<button className="add-product-fab" onClick={() => setOpen(true)}><Plus size={16} /> Add product</button></>
+}
+
+function BillingProductSearch({ catalog }: { catalog: Product[] }) {
+  const [visible, setVisible] = useState(false)
+  const [value, setValue] = useState('')
+
+  useEffect(() => {
+    const sync = () => {
+      const modal = document.querySelector('.billing-modal')
+      const select = modal?.querySelector('select') as HTMLSelectElement | null
+      const selected = catalog.find((product) => product.id === Number(select?.value))
+      setVisible(Boolean(modal))
+      if (selected) setValue(selected.name)
+    }
+    sync()
+    const observer = new MutationObserver(sync)
+    observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['class'] })
+    return () => observer.disconnect()
+  }, [catalog])
+
+  function selectProduct(name: string) {
+    setValue(name)
+    const product = catalog.find((item) => item.name === name)
+    const select = document.querySelector('.billing-modal select') as HTMLSelectElement | null
+    if (!product || !select) return
+    select.value = String(product.id)
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+  }
+
+  if (!visible) return null
+  return <div className="billing-product-search-overlay"><Search size={14} /><input list="billing-product-suggestions" value={value} onChange={(event) => selectProduct(event.target.value)} placeholder="Search products or brands" /><datalist id="billing-product-suggestions">{catalog.map((product) => <option key={product.id} value={product.name}>{product.brand} · {money(product.price)}</option>)}</datalist></div>
 }
 
 function AdminBillingQuickAccess({ catalog, orders, onStatus, onCreateOrder }: { catalog: Product[]; orders: Order[]; onStatus: (order: Order, status: OrderStatus) => void; onCreateOrder: (details: Omit<Order, 'code' | 'createdAt' | 'status'>) => Order }) {
