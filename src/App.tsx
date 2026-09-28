@@ -78,7 +78,6 @@ function loadRetainedOrders() {
 function createInvoicePdf(order: Order) {
   const pdf = new jsPDF({ unit: 'mm', format: 'a4' })
   const subtotal = order.items.reduce((sum, item) => sum + item.price * item.quantity, 0)
-  const taxAndDelivery = Math.max(0, order.total - subtotal)
   let y = 24
   pdf.setTextColor(23, 75, 60)
   pdf.setFontSize(19)
@@ -120,9 +119,6 @@ function createInvoicePdf(order: Order) {
   pdf.text('Subtotal', 125, y)
   pdf.text(money(subtotal), 165, y)
   y += 7
-  pdf.text('GST / delivery', 125, y)
-  pdf.text(money(taxAndDelivery), 165, y)
-  y += 8
   pdf.setTextColor(23, 75, 60)
   pdf.setFontSize(13)
   pdf.text('Grand total', 125, y)
@@ -353,8 +349,8 @@ function AdminBillingQuickAccess({ catalog, orders, onStatus, onCreateOrder }: {
   const [quantity, setQuantity] = useState('1')
   const [billLines, setBillLines] = useState<CartLine[]>([])
   const subtotal = billLines.reduce((sum, item) => sum + item.price * item.quantity, 0)
-  const gst = subtotal * 0.05
-  const total = subtotal + gst
+  const gst = 0
+  const total = subtotal
 
   function addLine() {
     const product = catalog.find((item) => item.id === Number(productId))
